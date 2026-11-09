@@ -1,0 +1,77 @@
+name: Веб-версия и правила Firebase
+
+# Что делает:
+# 1) тесты калькулятора и статистики;
+# 2) тесты правил базы на эмуляторе Firebase (без вашего проекта, ничего не трогает);
+# 3) сборка веб-версии с ключами из Secrets;
+# 4) публикация на Firebase Hosting + правила и индексы базы — только если добавлен секрет FIREBASE_SERVICE_ACCOUNT.
+
+on:
+  workflow_dispatch:
+  push:
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    env:
+      FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+      FIREBASE_AUTH_DOMAIN: ${{ secrets.FIREBASE_AUTH_DOMAIN }}
+      FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+      FIREBASE_APP_ID: ${{ secrets.FIREBASE_APP_ID }}
+      FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.FIREBASE_MESSAGING_SENDER_ID }}
+      HAS_DEPLOY_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Поиск проекта (папка или загруженный zip-архив)
+        run: |
+          if [ ! -f capacitor.config.json ]; then
+            for f in *.zip; do [ -f "$f" ] && unzip -q -o "$f" -d _app; done
+          fi
+          CFG=$(find . -name capacitor.config.json -not -path "*/node_modules/*" | head -1)
+          if [ -z "$CFG" ]; then echo "Не найден проект. Загрузите в репозиторий файл zarplata.zip"; exit 1; fi
+          echo "PROJ=$(realpath "$(dirname "$CFG")")" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Тесты калькулятора и статистики
+        run: |
+          cd "$PROJ"
+          npm install --no-audit --no-fund
+          npm test
+
+      - name: Тесты правил базы на эмуляторе Firebase
+        run: |
+          cd "$PROJ/tests/rules"
+          npm install --no-audit --no-fund
+          npm test
+
+      - name: Сборка веб-версии
+        run: |
+          cd "$PROJ"
+          if [ -z "$FIREBASE_API_KEY" ]; then echo "::warning::Секреты Firebase не заданы — веб-версия собрана без облака (см. FIREBASE_SETUP.md)"; fi
+          npm run build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zarplata-web
+          path: ${{ env.PROJ }}/www
+
+      - name: Публикация на Firebase Hosting (правила и индексы базы — тоже)
+        if: env.HAS_DEPLOY_KEY == 'true' && github.ref == 'refs/heads/main'
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          cd "$PROJ"
+          echo "$SA" > "$RUNNER_TEMP/sa.json"
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
+          ./tests/rules/node_modules/.bin/firebase deploy --only hosting,firestore:rules,firestore:indexes --project "$FIREBASE_PROJECT_ID" --non-interactive
+          rm -f "$RUNNER_TEMP/sa.json"
+          echo "Готово: https://$FIREBASE_PROJECT_ID.web.app"
