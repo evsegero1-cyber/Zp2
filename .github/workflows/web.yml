@@ -62,6 +62,13 @@ jobs:
           (cd /tmp/www-emu && nohup python3 -m http.server 5050 --bind 127.0.0.1 > /dev/null 2>&1 &)
           ./tests/rules/node_modules/.bin/firebase emulators:exec --only auth,firestore --project demo-zarplata "node tests/rules/e2e-cloud.mjs"
 
+      - name: Проверка в движке Safari (WebKit, iPhone 15) на эмуляторе Firebase
+        run: |
+          cd "$PROJ/tests/rules"
+          npx playwright install --with-deps webkit > /dev/null
+          cd "$PROJ"
+          ./tests/rules/node_modules/.bin/firebase emulators:exec --only auth,firestore --project demo-zarplata "node tests/rules/e2e-webkit.mjs"
+
       - name: Скриншоты проверки (если что-то упало)
         if: failure()
         uses: actions/upload-artifact@v4
