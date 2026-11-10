@@ -1,0 +1,35 @@
+name: Расход лимитов Firebase
+
+# Раз в час: сколько чтений/записей/удалений из бесплатного лимита потрачено сегодня, и раз в сутки — объём базы.
+# Результат — в документ adminMeta/usage (виден только администратору в админ-панели приложения).
+
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+    inputs:
+      storage:
+        description: 'Пересчитать объём базы сейчас'
+        type: boolean
+        default: false
+
+jobs:
+  usage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - name: Распаковка проекта
+        run: |
+          for f in *.zip; do [ -f "$f" ] && unzip -q -o "$f" -d _app; done
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Подсчёт
+        working-directory: _app/scripts/usage
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FORCE_STORAGE: ${{ inputs.storage && '1' || '' }}
+        run: |
+          npm install --no-audit --no-fund --silent
+          node usage.mjs
