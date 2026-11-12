@@ -87,6 +87,11 @@ jobs:
           cd "$PROJ"
           if [ -z "$FIREBASE_API_KEY" ]; then echo "::warning::Секреты Firebase не заданы — веб-версия собрана без облака (см. FIREBASE_SETUP.md)"; fi
           npm run build
+          # Архив для обновления APK «по воздуху» (без файлов распознавания — их APK берёт с сайта)
+          VER=$(node -p "require('./www/version.json').version")
+          mkdir -p www/ota
+          (cd www && zip -qr "ota/$VER.zip" . -x "ocr/*" "ota/*" "icons/splash/*")
+          ls -la www/ota
 
       - uses: actions/upload-artifact@v4
         with:
