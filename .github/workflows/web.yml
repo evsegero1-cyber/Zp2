@@ -91,6 +91,10 @@ jobs:
           VER=$(node -p "require('./www/version.json').version")
           mkdir -p www/ota
           (cd www && zip -qr "ota/$VER.zip" . -x "ocr/*" "ota/*" "icons/splash/*")
+          # контрольная сумма SHA-256 архива — без неё приложение не примет обновление
+          SUM=$(sha256sum "www/ota/$VER.zip" | cut -d' ' -f1)
+          node -e "const f='www/version.json',j=require('./'+f);j.download={checksum:process.argv[1]};require('fs').writeFileSync(f,JSON.stringify(j))" "$SUM"
+          cat www/version.json
           ls -la www/ota
 
       - uses: actions/upload-artifact@v4
